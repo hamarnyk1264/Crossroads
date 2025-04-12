@@ -14,7 +14,7 @@ public class Main
         if(level==1){
             Game.main(args);
         }else if(level==2){
-            
+            System.out.println("level 2 is a work in progress");
         }else{
             System.out.println("Invalid Input");
         }

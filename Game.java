@@ -9,19 +9,18 @@ import java.io.IOException;
 public class Game extends JPanel implements ActionListener, KeyListener {
 
     private Timer timer;
-    private final int DELAY = 16; // ~60 FPS (Adjust for smoother gameplay)
+    private final int DELAY = 16; // ~60 FPS
 
-    // Player properties
     private int playerX = 815, playerY = 210;
     private int playerSizeX = 146, playerSizeY = 110;
-    private double playerSpeed = 8; // Increased speed for smoother gameplay
+    private double playerSpeed = 8;
     private String playerDirection = "left";
     private boolean playerLost = false;
     private boolean playerWon = false;
-    private boolean playerStoppedAtStopSign = false; // Track if player stops at stop sign
-    private long stopSignStartTime = 0; // Time when player started stopping at the stop sign
+    private boolean playerStoppedAtStopSign = false;
+    private long stopSignStartTime = 0;
+    private double stopElapsedSeconds = 0;
 
-    // AI properties
     private int aiX = 0, aiY = 210;
     private int aiSizeX = 146, aiSizeY = 110;
     private double aiSpeed = Math.random() * 5 + 5;
@@ -30,14 +29,12 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     private boolean aiTurnedUp = false;
     private long aiStopStartTime = 0;
 
-    // Assets
     private BufferedImage playerSprite, aiSprite, backgroundImage;
 
-    // Stop Sign Location
-    private final int STOP_SIGN_X = 570;
-    private final int STOP_SIGN_TOLERANCE = 10; // tolerance range for stopping near the sign
-    private final long STOP_SIGN_REQUIRED_TIME = 2000; // 2 seconds in milliseconds
-
+    private final int STOP_SIGN_X = 590;
+    private final int STOP_SIGN_TOLERANCE = 10;
+    private final long STOP_SIGN_REQUIRED_TIME = 2000; // 2 seconds
+    private boolean allowMovementAfterStop = false;
     public Game() {
         setFocusable(true);
         setPreferredSize(new Dimension(960, 700));
@@ -61,8 +58,8 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         if (!playerLost && !playerWon) {
             updateAI();
             checkCollisions();
+            checkStopSign();
             checkWinCondition();
-            checkStopSign(); // Check if player stopped at the stop sign
         }
         loadAssets();
     }
@@ -100,40 +97,46 @@ public class Game extends JPanel implements ActionListener, KeyListener {
     }
 
     private void checkCollisions() {
-        // Check if player has touched the grass
         if ((playerX < 300 && (playerY < 200 || playerY > 300)) || (playerX > 525 && (playerY < 200 || playerY > 300))) {
             playerLost = true;
         }
-        
-        // Check if player collides with AI
-        if (playerX < aiX + aiSizeX && playerX + playerSizeX > aiX && playerY < aiY + aiSizeY && playerY + playerSizeY > aiY) {
+
+        if (playerX < aiX + aiSizeX && playerX + playerSizeX > aiX &&
+            playerY < aiY + aiSizeY && playerY + playerSizeY > aiY) {
             playerLost = true;
         }
     }
 
     private void checkStopSign() {
-        // Check if player is at the stop sign (within tolerance)
-        if (Math.abs(playerX - STOP_SIGN_X) <= STOP_SIGN_TOLERANCE) {
-            if (stopSignStartTime == 0) {
-                stopSignStartTime = System.currentTimeMillis(); // Start timing when player stops at stop sign
+        boolean inStopZone = Math.abs(playerX - STOP_SIGN_X) <= STOP_SIGN_TOLERANCE;
+
+        if (inStopZone) {
+            if (!playerStoppedAtStopSign) {
+                stopSignStartTime = System.currentTimeMillis();
+                playerStoppedAtStopSign = true;
+            } else {
+                long elapsed = System.currentTimeMillis() - stopSignStartTime;
+                stopElapsedSeconds = elapsed / 1000.0;
+                if (elapsed >= STOP_SIGN_REQUIRED_TIME) {
+                    allowMovementAfterStop = true;
+                }
             }
-            playerStoppedAtStopSign = true;
         } else {
-            // If the player leaves the stop sign area, reset the timer
-            stopSignStartTime = 0;
-            playerStoppedAtStopSign = false;
+            if (playerStoppedAtStopSign && !allowMovementAfterStop) {
+                playerLost = true;
+            }
+
+            if (!allowMovementAfterStop) {
+                playerStoppedAtStopSign = false;
+                stopElapsedSeconds = 0;
+                stopSignStartTime = 0;
+            }
         }
     }
 
     private void checkWinCondition() {
-        // Player can only win if they are past the stop sign and stayed there for 2 seconds
-        if (playerY >= 505 && playerStoppedAtStopSign && (System.currentTimeMillis() - stopSignStartTime) >= STOP_SIGN_REQUIRED_TIME) {
+        if (playerY >= 505 && allowMovementAfterStop) {
             playerWon = true;
-        }
-
-        // If player crosses the stop sign before the required time has passed, they lose
-        if (playerStoppedAtStopSign && (System.currentTimeMillis() - stopSignStartTime) < STOP_SIGN_REQUIRED_TIME) {
-            playerLost = true;
         }
     }
 
@@ -181,33 +184,41 @@ public class Game extends JPanel implements ActionListener, KeyListener {
         if (aiSprite != null) g.drawImage(aiSprite, aiX, aiY, null);
 
         g.setColor(Color.BLACK);
-        g.setFont(new Font("Arial", Font.PLAIN, 14));
+        g.setFont(new Font("Comic Sans MS", Font.BOLD, 14));
         g.drawString("Player X: " + playerX + " | Y: " + playerY, 10, 20);
 
-        // Display loss message
-        if (playerLost) {
-            g.setFont(new Font("Arial", Font.BOLD, 30));
-            g.setColor(Color.RED);
-            g.drawString("You Lost!", 380, 350);
+        // Text background for stop sign
+        g.setColor(Color.WHITE);
+        g.fillRoundRect(230, 15, 500, 30, 20, 20); // Background behind the text
+
+        g.setColor(Color.BLUE);
+        if (playerStoppedAtStopSign && !allowMovementAfterStop) {
+            g.setFont(new Font("Comic Sans MS", Font.BOLD, 20));
+            g.drawString(String.format("Stopping... %.2f / 2.00 seconds", stopElapsedSeconds), 250, 40);
+        } else if (!playerStoppedAtStopSign && !allowMovementAfterStop) {
+            g.setFont(new Font("Comic Sans MS", Font.BOLD, 20));
+            g.drawString("Stop at the stop sign for 2 seconds!", 250, 40);
+        } else if (allowMovementAfterStop) {
+            g.setFont(new Font("Comic Sans MS", Font.BOLD, 20));
+            g.drawString("You may proceed!", 350, 40);
         }
 
-        // Display win message
+        // Win message with background
         if (playerWon) {
-            g.setFont(new Font("Arial", Font.BOLD, 30));
+            g.setColor(Color.WHITE);
+            g.fillRoundRect(300, 300, 360, 80, 20, 20);
             g.setColor(Color.GREEN);
+            g.setFont(new Font("Comic Sans MS", Font.BOLD, 40));
             g.drawString("You Win!", 380, 350);
         }
 
-        // Display message if player has stopped at the stop sign
-        if (playerStoppedAtStopSign) {
-            g.setFont(new Font("Arial", Font.PLAIN, 20));
-            g.setColor(Color.BLUE);
-            g.drawString("You have stopped at the stop sign!", 300, 50);
-        } else {
-            // Notify player they need to stop at the stop sign
-            g.setFont(new Font("Arial", Font.PLAIN, 20));
-            g.setColor(Color.BLUE);
-            g.drawString("Stop at the stop sign for 2 seconds!", 300, 50);
+        // Loss message
+        if (playerLost) {
+            g.setColor(Color.WHITE);
+            g.fillRoundRect(300, 300, 360, 80, 20, 20);
+            g.setColor(Color.RED);
+            g.setFont(new Font("Comic Sans MS", Font.BOLD, 40));
+            g.drawString("You Lost!", 380, 350);
         }
     }
 
